@@ -8,6 +8,7 @@ export interface Lottery {
   url: string
   status: LotteryStatus
   note: string
+  auto_scraped: boolean
   created_at: string
 }
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { Lottery, LotteryStatus } from '@/lib/types'
-import { ExternalLink, Trash2 } from 'lucide-react'
+import { ExternalLink, Trash2, Bot } from 'lucide-react'
 
 interface Props {
   lottery: Lottery
@@ -33,10 +33,17 @@ export default function LotteryCard({ lottery, onUpdateStatus, onDelete }: Props
   const isExpired = days < 0
 
   return (
-    <div className={`bg-white rounded-xl border p-4 shadow-sm ${isExpired ? 'opacity-60' : ''}`}>
+    <div className={`bg-white rounded-xl border p-4 shadow-sm ${isExpired ? 'opacity-60' : ''} ${lottery.auto_scraped ? 'border-l-4 border-l-purple-400' : ''}`}>
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex-1 min-w-0">
-          <div className="text-xs text-gray-400 mb-0.5">{lottery.site_name}</div>
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <span className="text-xs text-gray-400">{lottery.site_name}</span>
+            {lottery.auto_scraped && (
+              <span className="flex items-center gap-0.5 text-xs text-purple-500 bg-purple-50 px-1.5 py-0.5 rounded-full">
+                <Bot size={10} />自動取得
+              </span>
+            )}
+          </div>
           <div className="font-semibold text-gray-800 truncate">{lottery.product_name}</div>
         </div>
         <span className={`text-xs px-2 py-1 rounded-full font-medium shrink-0 ${STATUS_STYLES[lottery.status]}`}>

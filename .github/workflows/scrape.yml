@@ -1,0 +1,26 @@
+name: ポケカ抽選スクレイパー
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'  # 30分ごとに実行
+  workflow_dispatch:          # 手動実行も可能
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 依存関係インストール
+        run: npm ci
+
+      - name: スクレイパー実行
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: npx tsx scripts/scraper.ts
