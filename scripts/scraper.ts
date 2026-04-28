@@ -108,10 +108,10 @@ async function main() {
       // 抽選 × ポケカ情報が両方ある場合、関連リンクを抽出
       const links = await page.$$eval('a', (els) =>
         els.map(el => {
-          // リンク自体のテキスト + 親要素のテキストも取得
-          const text = el.innerText?.trim() ?? ''
-          const parentText = el.closest('li,div,article,section,p')?.innerText?.trim() ?? ''
-          return { text, parentText: parentText.slice(0, 200), href: el.href }
+          const text = (el as HTMLElement).innerText?.trim() ?? ''
+          const parent = el.closest('li,div,article,section,p')
+          const parentText = parent ? (parent as HTMLElement).innerText?.trim() ?? '' : ''
+          return { text, parentText: parentText.slice(0, 200), href: (el as HTMLAnchorElement).href }
         })
       )
 
