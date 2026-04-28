@@ -7,6 +7,33 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
+const DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK_URL!
+
+async function notifyDiscord(items: ScrapedItem[]) {
+  if (!DISCORD_WEBHOOK || items.length === 0) return
+
+  const embeds = items.slice(0, 10).map(item => ({
+    title: item.product_name,
+    url: item.url,
+    color: 0x3b82f6,
+    fields: [
+      { name: '🏪 ショップ', value: item.site_name, inline: true },
+      { name: '⏰ 締切', value: item.deadline ?? '不明', inline: true },
+    ],
+    footer: { text: '自動取得 | ポケカ抽選管理' },
+    timestamp: new Date().toISOString(),
+  }))
+
+  await fetch(DISCORD_WEBHOOK, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      content: `🎰 **新着抽選情報 ${items.length}件** が見つかりました！`,
+      embeds,
+    }),
+  })
+}
+
 interface ScrapedItem {
   site_name: string
   product_name: string
@@ -167,6 +194,8 @@ async function main() {
     console.error('保存エラー:', error.message)
   } else {
     console.log(`💾 ${newItems.length}件の新着を保存しました`)
+    await notifyDiscord(newItems)
+    console.log('🔔 Discord通知を送信しました')
   }
 
   console.log('\n✨ 完了')
