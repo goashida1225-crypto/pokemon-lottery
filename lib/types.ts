@@ -9,6 +9,7 @@ export interface Lottery {
   status: LotteryStatus
   note: string
   auto_scraped: boolean
+  deadline_estimated: boolean
   created_at: string
 }
 

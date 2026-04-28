@@ -32,7 +32,7 @@ export const shops: ShopConfig[] = [
   {
     name: 'ホビーステーション',
     category: 'カードショップ',
-    checkUrl: 'https://www.hobbystation.jp/',
+    checkUrl: 'https://hobbystation.co.jp/',
     keywords: ['抽選', 'ポケモンカード', 'ポケカ'],
   },
   {
@@ -70,25 +70,25 @@ export const shops: ShopConfig[] = [
   {
     name: 'ヨドバシカメラ',
     category: '量販店',
-    checkUrl: 'https://www.yodobashi.com/category/10000/10001/10002/10003/',
+    checkUrl: 'https://www.yodobashi.com/ec/category/index.html?id=57',
     keywords: ['抽選', 'ポケモンカード', 'ポケカ'],
   },
   {
     name: 'ビックカメラ',
     category: '量販店',
-    checkUrl: 'https://www.biccamera.com/bc/c/game/card/pokemon/',
+    checkUrl: 'https://www.biccamera.com/bc/c/game/card/',
     keywords: ['抽選', 'ポケモンカード', 'ポケカ'],
   },
   {
     name: 'ヤマダ電機',
     category: '量販店',
-    checkUrl: 'https://www.yamada-denkiweb.com/',
+    checkUrl: 'https://www.yamada-denkiweb.com/ct/10011001011000000/',
     keywords: ['抽選', 'ポケモンカード'],
   },
   {
     name: 'ジョーシン',
     category: '量販店',
-    checkUrl: 'https://joshinweb.jp/',
+    checkUrl: 'https://joshinweb.jp/game/card.html',
     keywords: ['抽選', 'ポケモンカード', 'ポケカ'],
   },
   {
@@ -134,7 +134,7 @@ export const shops: ShopConfig[] = [
   {
     name: 'ハピネット・オンライン',
     category: 'おもちゃ・ホビー',
-    checkUrl: 'https://www.happinet-onlineshop.com/',
+    checkUrl: 'https://www.happinet-onlineshop.com/fs/hpnet/gr-card-pokemon',
     keywords: ['抽選', 'ポケモンカード', 'ポケカ'],
   },
 ]
