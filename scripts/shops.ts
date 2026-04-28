@@ -14,7 +14,7 @@ export const shops: ShopConfig[] = [
   {
     name: 'ポケモンセンターオンライン',
     category: 'カードショップ',
-    checkUrl: 'https://www.pokemoncenter-online.com/topics/',
+    checkUrl: 'https://www.pokemoncenter-online.com/',
     keywords: ['抽選', 'ポケモンカード', 'カードゲーム'],
   },
   {
@@ -32,7 +32,7 @@ export const shops: ShopConfig[] = [
   {
     name: 'ホビーステーション',
     category: 'カードショップ',
-    checkUrl: 'https://hobbystation.co.jp/',
+    checkUrl: 'https://www.hobbystation.jp/lp/newinfo/',
     keywords: ['抽選', 'ポケモンカード', 'ポケカ'],
   },
   {
@@ -50,7 +50,7 @@ export const shops: ShopConfig[] = [
   {
     name: '駿河屋',
     category: 'カードショップ',
-    checkUrl: 'https://www.suruga-ya.jp/product/other/250401',
+    checkUrl: 'https://www.suruga-ya.jp/category/detail/250401',
     keywords: ['抽選', 'ポケモンカード', '予約'],
   },
   {
@@ -100,7 +100,7 @@ export const shops: ShopConfig[] = [
   {
     name: 'イオン',
     category: '量販店',
-    checkUrl: 'https://www.aeon.com/activity/',
+    checkUrl: 'https://shop.aeon.com/search/?q=ポケモンカード+抽選',
     keywords: ['抽選', 'ポケモンカード', 'ポケカ'],
   },
 
@@ -114,7 +114,7 @@ export const shops: ShopConfig[] = [
   {
     name: 'とらのあな',
     category: '本屋・アニメショップ',
-    checkUrl: 'https://ecs.toranoana.jp/tora/ec/cot/genre/04/0420/',
+    checkUrl: 'https://ec.toranoana.jp/tora/ec/cot/genre/04/0420/',
     keywords: ['抽選', 'ポケモンカード', 'ポケカ'],
   },
   {
@@ -134,7 +134,7 @@ export const shops: ShopConfig[] = [
   {
     name: 'ハピネット・オンライン',
     category: 'おもちゃ・ホビー',
-    checkUrl: 'https://www.happinet-onlineshop.com/fs/hpnet/gr-card-pokemon',
+    checkUrl: 'https://www.happinet-onlineshop.com/',
     keywords: ['抽選', 'ポケモンカード', 'ポケカ'],
   },
 ]
