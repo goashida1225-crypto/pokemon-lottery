@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Profile } from '@/lib/types'
-import { Copy, Check, ArrowLeft, User } from 'lucide-react'
+import { Copy, Check, ArrowLeft, User, Loader2 } from 'lucide-react'
 
 const FIELDS: { key: keyof Profile; label: string; placeholder: string }[] = [
   { key: 'last_name', label: '姓', placeholder: '山田' },
@@ -26,14 +26,38 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile>(EMPTY)
   const [saved, setSaved] = useState(false)
   const [copied, setCopied] = useState<keyof Profile | null>(null)
+  const [loadingZip, setLoadingZip] = useState(false)
 
   useEffect(() => {
     const stored = localStorage.getItem('profile')
     if (stored) setProfile(JSON.parse(stored))
   }, [])
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setProfile(prev => ({ ...prev, [e.target.name]: e.target.value }))
+  async function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const { name, value } = e.target
+    setProfile(prev => ({ ...prev, [name]: value }))
+
+    // 郵便番号が7桁になったら自動補完
+    if (name === 'postal_code') {
+      const digits = value.replace(/-/g, '')
+      if (digits.length === 7) {
+        setLoadingZip(true)
+        try {
+          const res = await fetch(`https://zipcloud.ibsnet.co.jp/api/search?zipcode=${digits}`)
+          const json = await res.json()
+          if (json.results?.[0]) {
+            const r = json.results[0]
+            setProfile(prev => ({
+              ...prev,
+              prefecture: r.address1,
+              city: r.address2 + r.address3,
+            }))
+          }
+        } catch { /* サイレント */ } finally {
+          setLoadingZip(false)
+        }
+      }
+    }
   }
 
   function handleSave() {
@@ -91,6 +115,9 @@ export default function ProfilePage() {
                   className="w-full text-sm text-gray-800 focus:outline-none bg-transparent placeholder-gray-300"
                 />
               </div>
+              {key === 'postal_code' && loadingZip && (
+                <Loader2 size={13} className="animate-spin text-indigo-400 shrink-0" />
+              )}
               <button
                 onClick={() => handleCopy(key)}
                 className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-all ${
