@@ -1,26 +1,59 @@
 export interface ShopConfig {
   name: string
-  category: 'カードショップ' | '量販店' | '本屋・アニメショップ' | 'おもちゃ・ホビー'
+  category: 'アグリゲーター' | 'カードショップ' | '量販店' | '本屋・アニメショップ' | 'おもちゃ・ホビー'
   checkUrl: string
-  lotterySelectors?: string  // 抽選情報が載っている要素のセレクタ
   keywords: string[]
+  // アグリゲーター用の専用セレクタ
+  selectors?: {
+    items: string
+    title: string
+    link: string
+    date?: string
+  }
 }
 
 export const LOTTERY_KEYWORDS = ['抽選', '抽せん', '応募', 'ロッテリー']
 export const POKEMON_KEYWORDS = ['ポケモンカード', 'ポケカ', 'ポケットモンスター', 'pokemon card', 'カードゲーム']
 
 export const shops: ShopConfig[] = [
-  // ===== カードショップ =====
+
+  // ===== アグリゲーター（最優先・全抽選情報を網羅）=====
+  {
+    name: 'ポケカウォッチ',
+    category: 'アグリゲーター',
+    checkUrl: 'https://pokecawatch.com/category/%E6%8A%BD%E9%81%B8%E3%83%BB%E4%BA%88%E7%B4%84%E6%83%85%E5%A0%B1/',
+    keywords: ['抽選', 'ポケモンカード', '予約'],
+    selectors: {
+      items: 'article',
+      title: 'h2 a, h3 a',
+      link: 'h2 a, h3 a',
+      date: 'time, .date',
+    },
+  },
+  {
+    name: '入荷NOW',
+    category: 'アグリゲーター',
+    checkUrl: 'https://nyuka-now.com/archives/2459',
+    keywords: ['抽選', 'ポケモンカード', '予約'],
+    selectors: {
+      items: 'tr, .lottery-item',
+      title: 'td a, h3',
+      link: 'a[href*="pokemon"], a[href*="lottery"], td a',
+      date: 'td',
+    },
+  },
+
+  // ===== 公式・主要カードショップ =====
   {
     name: 'ポケモンセンターオンライン',
     category: 'カードショップ',
-    checkUrl: 'https://www.pokemoncenter-online.com/',
+    checkUrl: 'https://www.pokemoncenter-online.com/lottery/apply.html',
     keywords: ['抽選', 'ポケモンカード', 'カードゲーム'],
   },
   {
     name: '遊々亭',
     category: 'カードショップ',
-    checkUrl: 'https://yuyu-tei.jp/',
+    checkUrl: 'https://yuyu-tei.jp/top/poc',
     keywords: ['抽選', '予約受付', 'ポケモンカード'],
   },
   {
@@ -28,12 +61,6 @@ export const shops: ShopConfig[] = [
     category: 'カードショップ',
     checkUrl: 'https://www.cardrush-pokemon.jp/',
     keywords: ['抽選', 'ポケモンカード', '予約'],
-  },
-  {
-    name: 'ホビーステーション',
-    category: 'カードショップ',
-    checkUrl: 'https://www.hobbystation.jp/lp/newinfo/',
-    keywords: ['抽選', 'ポケモンカード', 'ポケカ'],
   },
   {
     name: 'カーナベル',
@@ -48,15 +75,9 @@ export const shops: ShopConfig[] = [
     keywords: ['抽選', 'ポケモンカード', 'ポケカ'],
   },
   {
-    name: '駿河屋',
-    category: 'カードショップ',
-    checkUrl: 'https://www.suruga-ya.jp/category/detail/250401',
-    keywords: ['抽選', 'ポケモンカード', '予約'],
-  },
-  {
     name: 'あみあみ',
     category: 'カードショップ',
-    checkUrl: 'https://www.amiami.jp/top/detail/detail?gcode=CARD-00001',
+    checkUrl: 'https://www.amiami.jp/top/page/t/lottery.html',
     keywords: ['抽選', 'ポケモンカード', 'ポケカ'],
   },
   {
@@ -66,42 +87,24 @@ export const shops: ShopConfig[] = [
     keywords: ['抽選', 'ポケモンカード', 'ポケカ'],
   },
 
-  // ===== 量販店 =====
+  // ===== 量販店・EC =====
   {
-    name: 'ヨドバシカメラ',
+    name: 'GEOオンライン',
     category: '量販店',
-    checkUrl: 'https://www.yodobashi.com/ec/category/index.html?id=57',
+    checkUrl: 'https://geo-online.co.jp/',
     keywords: ['抽選', 'ポケモンカード', 'ポケカ'],
   },
   {
-    name: 'ビックカメラ',
+    name: '楽天ブックス',
     category: '量販店',
-    checkUrl: 'https://www.biccamera.com/bc/c/game/card/',
-    keywords: ['抽選', 'ポケモンカード', 'ポケカ'],
+    checkUrl: 'https://books.rakuten.co.jp/event/game/card/entry/',
+    keywords: ['抽選', 'ポケモンカード', 'ポケカ', '応募'],
   },
   {
-    name: 'ヤマダ電機',
+    name: 'セブンネット',
     category: '量販店',
-    checkUrl: 'https://www.yamada-denkiweb.com/ct/10011001011000000/',
+    checkUrl: 'https://7net.omni7.jp/search_result/?keyword=ポケモンカード+抽選',
     keywords: ['抽選', 'ポケモンカード'],
-  },
-  {
-    name: 'ジョーシン',
-    category: '量販店',
-    checkUrl: 'https://joshinweb.jp/game/card.html',
-    keywords: ['抽選', 'ポケモンカード', 'ポケカ'],
-  },
-  {
-    name: 'ドン・キホーテ',
-    category: '量販店',
-    checkUrl: 'https://www.donki.com/campaign/',
-    keywords: ['抽選', 'ポケモンカード', 'ポケカ'],
-  },
-  {
-    name: 'イオン',
-    category: '量販店',
-    checkUrl: 'https://shop.aeon.com/search/?q=ポケモンカード+抽選',
-    keywords: ['抽選', 'ポケモンカード', 'ポケカ'],
   },
 
   // ===== 本屋・アニメショップ =====
@@ -109,12 +112,6 @@ export const shops: ShopConfig[] = [
     name: 'アニメイト',
     category: '本屋・アニメショップ',
     checkUrl: 'https://www.animate.co.jp/news/',
-    keywords: ['抽選', 'ポケモンカード', 'ポケカ'],
-  },
-  {
-    name: 'とらのあな',
-    category: '本屋・アニメショップ',
-    checkUrl: 'https://ec.toranoana.jp/tora/ec/cot/genre/04/0420/',
     keywords: ['抽選', 'ポケモンカード', 'ポケカ'],
   },
   {
@@ -129,12 +126,6 @@ export const shops: ShopConfig[] = [
     name: 'トイザらス',
     category: 'おもちゃ・ホビー',
     checkUrl: 'https://www.toysrus.co.jp/',
-    keywords: ['抽選', 'ポケモンカード', 'ポケカ'],
-  },
-  {
-    name: 'ハピネット・オンライン',
-    category: 'おもちゃ・ホビー',
-    checkUrl: 'https://www.happinet-onlineshop.com/',
     keywords: ['抽選', 'ポケモンカード', 'ポケカ'],
   },
 ]

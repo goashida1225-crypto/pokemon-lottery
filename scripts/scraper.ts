@@ -1,13 +1,12 @@
-import { chromium, BrowserContext } from 'playwright'
+import { chromium, BrowserContext, Page } from 'playwright'
 import { createClient } from '@supabase/supabase-js'
-import { shops, LOTTERY_KEYWORDS, POKEMON_KEYWORDS } from './shops'
+import { shops, LOTTERY_KEYWORDS, POKEMON_KEYWORDS, ShopConfig } from './shops'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-// Discord: モジュール初期化時ではなく実行時に参照（env未設定でもクラッシュしない）
 function getWebhook() {
   return process.env.DISCORD_WEBHOOK_URL ?? ''
 }
@@ -36,8 +35,8 @@ function extractDeadline(text: string, shopName: string): { date: string; estima
     /(\d{1,2})月(\d{1,2})日/,
     /(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/,
   ]
-  for (const pattern of patterns) {
-    const m = text.match(pattern)
+  for (const pat of patterns) {
+    const m = text.match(pat)
     if (m) {
       if (m[1]?.length === 4) {
         return { date: `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`, estimated: false }
@@ -46,19 +45,68 @@ function extractDeadline(text: string, shopName: string): { date: string; estima
       return { date: `${year}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`, estimated: false }
     }
   }
-  // 締切が取れなかった場合は推定値（14日後）
-  console.log(`    ⚠️ [${shopName}] 締切日が取得できませんでした。14日後を設定します。`)
+  console.log(`    ⚠️  [${shopName}] 締切日未取得 → 14日後で設定`)
   const future = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
   return { date: future.toISOString().split('T')[0], estimated: true }
 }
 
-// ===== スクレイピング（1ショップ） =====
+// ===== アグリゲーター専用スクレイパー =====
 
-async function scrapeShop(context: BrowserContext, shop: typeof shops[0]): Promise<ScrapedItem[]> {
+async function scrapeAggregator(page: Page, shop: ShopConfig): Promise<ScrapedItem[]> {
+  const results: ScrapedItem[] = []
+  const sel = shop.selectors!
+
+  await page.goto(shop.checkUrl, { waitUntil: 'domcontentloaded', timeout: 15000 })
+  await page.waitForTimeout(1500)
+
+  const items = await page.$$(sel.items)
+
+  for (const item of items.slice(0, 30)) {
+    try {
+      const titleEl = await item.$(sel.title)
+      const linkEl = await item.$(sel.link)
+      if (!titleEl || !linkEl) continue
+
+      const title = (await titleEl.innerText()).trim()
+      const href = await linkEl.getAttribute('href') ?? ''
+      const fullUrl = href.startsWith('http') ? href : new URL(href, shop.checkUrl).toString()
+      const itemText = (await item.innerText()).trim()
+
+      if (!containsAny(title + itemText, [...POKEMON_KEYWORDS, ...shop.keywords])) continue
+
+      const dateText = sel.date ? (await item.$(sel.date))?.innerText() ?? '' : ''
+      const { date, estimated } = extractDeadline(await dateText + itemText, shop.name)
+
+      results.push({
+        site_name: shop.name,
+        product_name: title.slice(0, 100),
+        url: fullUrl,
+        deadline: date,
+        deadline_estimated: estimated,
+        note: `自動取得 (${shop.category})${estimated ? ' ※締切推定' : ''}`,
+        status: 'pending',
+        auto_scraped: true,
+      })
+    } catch { /* item取得失敗は無視 */ }
+  }
+
+  return results
+}
+
+// ===== 通常ショップのスクレイパー =====
+
+async function scrapeShop(context: BrowserContext, shop: ShopConfig): Promise<ScrapedItem[]> {
   const results: ScrapedItem[] = []
   const page = await context.newPage()
 
   try {
+    // アグリゲーターは専用ロジック
+    if (shop.selectors) {
+      const items = await scrapeAggregator(page, shop)
+      console.log(`  ✅ [${shop.name}] ${items.length}件 (アグリゲーター)`)
+      return items
+    }
+
     await page.goto(shop.checkUrl, { waitUntil: 'domcontentloaded', timeout: 15000 })
 
     const pageText = await page.innerText('body').catch(() => '')
@@ -103,16 +151,16 @@ async function scrapeShop(context: BrowserContext, shop: typeof shops[0]): Promi
       }
     }
 
-    // リンクから見つからない場合、ページ自体を登録
+    // リンクで見つからない場合はページ自体を登録
     if (found === 0) {
       const line = pageText.split('\n').find(l =>
         containsAny(l, LOTTERY_KEYWORDS) && containsAny(l, POKEMON_KEYWORDS)
       )
-      if (line?.trim().length ?? 0 > 5) {
+      if (line && line.trim().length > 5) {
         const { date, estimated } = extractDeadline(pageText, shop.name)
         results.push({
           site_name: shop.name,
-          product_name: line!.trim().slice(0, 100),
+          product_name: line.trim().slice(0, 100),
           url: shop.checkUrl,
           deadline: date,
           deadline_estimated: estimated,
@@ -134,7 +182,7 @@ async function scrapeShop(context: BrowserContext, shop: typeof shops[0]): Promi
   return results
 }
 
-// ===== 並列処理（最大5件同時） =====
+// ===== 並列処理（最大5件同時）=====
 
 async function scrapeAllShops(context: BrowserContext): Promise<ScrapedItem[]> {
   const CONCURRENCY = 5
@@ -149,7 +197,7 @@ async function scrapeAllShops(context: BrowserContext): Promise<ScrapedItem[]> {
   return results
 }
 
-// ===== Supabase保存（URL＋商品名で重複防止） =====
+// ===== Supabase保存（URL＋商品名で重複防止）=====
 
 async function saveNewItems(items: ScrapedItem[]): Promise<ScrapedItem[]> {
   const { data: existing } = await supabase
@@ -162,7 +210,6 @@ async function saveNewItems(items: ScrapedItem[]): Promise<ScrapedItem[]> {
   )
 
   const newItems = items.filter(item => !existingKeys.has(`${item.url}::${item.product_name}`))
-
   if (newItems.length === 0) return []
 
   const { error } = await supabase.from('lotteries').insert(newItems)
@@ -171,7 +218,7 @@ async function saveNewItems(items: ScrapedItem[]): Promise<ScrapedItem[]> {
     return []
   }
 
-  console.log(`💾 ${newItems.length}件保存しました`)
+  console.log(`💾 ${newItems.length}件保存`)
   return newItems
 }
 
@@ -181,7 +228,6 @@ async function notifyDiscord(items: ScrapedItem[]) {
   const webhook = getWebhook()
   if (!webhook || items.length === 0) return
 
-  // Discord は1メッセージあたり最大10 embeds
   const embeds = items.slice(0, 10).map(item => ({
     title: item.product_name.slice(0, 256),
     url: item.url,
@@ -199,13 +245,11 @@ async function notifyDiscord(items: ScrapedItem[]) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        content: `🎰 **新着ポケカ抽選 ${items.length}件** が見つかりました！`,
+        content: `🎰 **新着ポケカ抽選 ${items.length}件！**`,
         embeds,
       }),
     })
-    if (!res.ok) {
-      console.error(`Discord通知失敗: HTTP ${res.status}`)
-    }
+    if (!res.ok) console.error(`Discord通知失敗: HTTP ${res.status}`)
   } catch (err) {
     console.error('Discord通知エラー:', err instanceof Error ? err.message : err)
   }
@@ -216,7 +260,7 @@ async function notifyDiscord(items: ScrapedItem[]) {
 async function main() {
   const start = Date.now()
   console.log('🚀 ポケカ抽選スクレイパー開始')
-  console.log(`対象ショップ数: ${shops.length}`)
+  console.log(`対象: ${shops.length}サイト (アグリゲーター${shops.filter(s => s.selectors).length}件含む)`)
 
   const browser = await chromium.launch({ headless: true })
   const context = await browser.newContext({
@@ -228,15 +272,22 @@ async function main() {
   const allResults = await scrapeAllShops(context)
   await browser.close()
 
-  console.log(`\n収集: ${allResults.length}件`)
+  // 重複排除（同じ抽選が複数ソースに載っている場合）
+  const deduped = allResults.filter((item, i, arr) =>
+    arr.findIndex(x => x.product_name === item.product_name && x.site_name !== item.site_name
+      ? false
+      : x.url === item.url) === i
+  )
 
-  if (allResults.length === 0) {
+  console.log(`\n収集: ${allResults.length}件 → 重複除去後: ${deduped.length}件`)
+
+  if (deduped.length === 0) {
     console.log('現在アクティブな抽選情報なし')
   } else {
-    const saved = await saveNewItems(allResults)
+    const saved = await saveNewItems(deduped)
     if (saved.length > 0) {
       await notifyDiscord(saved)
-      console.log('🔔 Discord通知送信完了')
+      console.log('🔔 Discord通知完了')
     } else {
       console.log('新着なし（すべて既存データ）')
     }
