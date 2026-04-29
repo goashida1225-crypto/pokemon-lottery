@@ -1,9 +1,33 @@
+import { createClient } from '@supabase/supabase-js'
+
 const LINE_API = 'https://api.line.me/v2/bot/message/push'
+
+async function getUserId(): Promise<string> {
+  // 環境変数 → Supabase settingsの順で取得
+  if (process.env.LINE_USER_ID) return process.env.LINE_USER_ID
+
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
+  )
+  const { data } = await supabase
+    .from('settings')
+    .select('value')
+    .eq('key', 'line_user_id')
+    .single()
+
+  return data?.value ?? ''
+}
 
 export async function sendLine(messages: { type: 'text'; text: string }[]) {
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN
-  const userId = process.env.LINE_USER_ID
-  if (!token || !userId) return
+  if (!token) return
+
+  const userId = await getUserId()
+  if (!userId) {
+    console.log('LINE User ID未設定 - スキップ')
+    return
+  }
 
   try {
     const res = await fetch(LINE_API, {
