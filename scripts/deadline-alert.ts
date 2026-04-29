@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { sendLine } from '../lib/line'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -60,10 +61,18 @@ async function main() {
       }),
     })
     if (!res.ok) console.error(`Discord失敗: ${res.status}`)
-    else console.log(`🔔 ${urgent.length}件の締切アラートを送信`)
+    else console.log(`🔔 Discord: ${urgent.length}件の締切アラートを送信`)
   } catch (e) {
     console.error(e)
   }
+
+  // LINE通知
+  const lineText = urgent.slice(0, 10).map(l => {
+    const days = daysUntil(l.deadline)
+    return `${days === 0 ? '🚨 本日締切！' : `⏰ 残り${days}日`} ${l.product_name}\n🏪 ${l.site_name}\n📅 ${l.deadline}`
+  }).join('\n\n')
+  await sendLine([{ type: 'text', text: `【締切アラート ${urgent.length}件】\n\n` + lineText }])
+  console.log(`🔔 LINE: ${urgent.length}件の締切アラートを送信`)
 }
 
 main().catch(console.error)

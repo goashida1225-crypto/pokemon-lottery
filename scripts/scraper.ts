@@ -1,6 +1,7 @@
 import { chromium, BrowserContext, Page } from 'playwright'
 import { createClient } from '@supabase/supabase-js'
 import { shops, LOTTERY_KEYWORDS, POKEMON_KEYWORDS, ShopConfig } from './shops'
+import { sendLine } from '../lib/line'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -255,6 +256,16 @@ async function notifyDiscord(items: ScrapedItem[]) {
   }
 }
 
+// ===== LINE通知 =====
+
+async function notifyLine(items: ScrapedItem[]) {
+  const lines = items.slice(0, 10).map(item =>
+    `🎰 ${item.product_name}\n🏪 ${item.site_name}\n⏰ ${item.deadline}${item.deadline_estimated ? '（推定）' : ''}\n🔗 ${item.url}`
+  )
+  const text = `【新着ポケカ抽選 ${items.length}件】\n\n` + lines.join('\n\n')
+  await sendLine([{ type: 'text', text }])
+}
+
 // ===== メイン =====
 
 async function main() {
@@ -287,7 +298,8 @@ async function main() {
     const saved = await saveNewItems(deduped)
     if (saved.length > 0) {
       await notifyDiscord(saved)
-      console.log('🔔 Discord通知完了')
+      await notifyLine(saved)
+      console.log('🔔 Discord・LINE通知完了')
     } else {
       console.log('新着なし（すべて既存データ）')
     }
