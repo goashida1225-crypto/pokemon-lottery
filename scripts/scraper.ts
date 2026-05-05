@@ -23,6 +23,50 @@ interface ScrapedItem {
   auto_scraped: boolean
 }
 
+// ショップドメイン → 表示名マッピング
+const SHOP_DOMAINS: Record<string, string> = {
+  'yodobashi.com': 'ヨドバシカメラ',
+  'biccamera.com': 'ビックカメラ',
+  'joshin.co.jp': 'ジョーシン',
+  'edion.co.jp': 'エディオン',
+  'geo-online.co.jp': 'GEO',
+  'pokemon.co.jp': 'ポケモンセンター',
+  'pokemoncenter-online.com': 'ポケモンセンターオンライン',
+  'amazon.co.jp': 'Amazon',
+  'rakuten.co.jp': '楽天',
+  'books.rakuten.co.jp': '楽天ブックス',
+  '7net.omni7.jp': 'セブンネット',
+  'animate.co.jp': 'アニメイト',
+  'amiami.jp': 'あみあみ',
+  'melonbooks.co.jp': 'メロンブックス',
+  'cardrush-pokemon.jp': 'カードラッシュ',
+  'yuyu-tei.jp': '遊々亭',
+  'hareruyamtg.com': '晴れる屋',
+  'ka-nabell.com': 'カーナベル',
+  'toysrus.co.jp': 'トイザらス',
+  'sofmap.com': 'ソフマップ',
+  'yamada-denki.jp': 'ヤマダ電機',
+  'kojima.net': 'コジマ',
+  'tsutaya.tsite.jp': 'TSUTAYA',
+  'honto.jp': 'honto',
+  'surugaya.co.jp': 'surugaya',
+  'lashinbang.com': 'らしんばん',
+  'mandarake.co.jp': 'まんだらけ',
+}
+
+function shopNameFromUrl(url: string): string {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, '')
+    for (const [domain, name] of Object.entries(SHOP_DOMAINS)) {
+      if (host.includes(domain)) return name
+    }
+    // ドメインの最初の部分を使用
+    return host.split('.')[0]
+  } catch {
+    return '不明'
+  }
+}
+
 // ===== ユーティリティ =====
 
 function containsAny(text: string, keywords: string[]): boolean {
@@ -46,23 +90,105 @@ function extractDeadline(text: string, shopName: string): { date: string; estima
       return { date: `${year}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`, estimated: false }
     }
   }
-  console.log(`    ⚠️  [${shopName}] 締切日未取得 → 14日後で設定`)
   const future = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
   return { date: future.toISOString().split('T')[0], estimated: true }
 }
 
-// ===== アグリゲーター専用スクレイパー =====
+// ===== アグリゲーター記事から実ショップURLを抽出 =====
 
-async function scrapeAggregator(page: Page, shop: ShopConfig): Promise<ScrapedItem[]> {
+async function resolveShopUrl(
+  context: BrowserContext,
+  articleUrl: string,
+  aggregatorHost: string,
+  title: string,
+  deadlineText: string,
+): Promise<ScrapedItem[]> {
+  const page = await context.newPage()
   const results: ScrapedItem[] = []
+
+  try {
+    await page.goto(articleUrl, { waitUntil: 'domcontentloaded', timeout: 12000 })
+
+    const pageText = await page.innerText('body').catch(() => '')
+    const { date, estimated } = extractDeadline(pageText + deadlineText, title)
+
+    // 外部リンク（アグリゲーター以外）を全て取得
+    const links = await page.$$eval('a[href]', (els, aggHost) =>
+      els.map(el => ({
+        text: ((el as HTMLElement).textContent ?? '').trim().slice(0, 100),
+        href: (el as HTMLAnchorElement).href ?? '',
+      })).filter(l =>
+        l.href.startsWith('http') &&
+        !l.href.includes(aggHost) &&
+        l.href.length > 10
+      ),
+      aggregatorHost
+    )
+
+    // 抽選関連キーワードを含むリンクを優先
+    const APPLY_WORDS = ['抽選', '応募', 'apply', 'lottery', 'entry', '購入', '予約']
+    const lotteryLinks = links.filter(l =>
+      APPLY_WORDS.some(w => l.href.toLowerCase().includes(w) || l.text.includes(w))
+    )
+    const candidates = lotteryLinks.length > 0 ? lotteryLinks : links
+
+    // ショップ別に1件ずつ（同じショップの重複を避ける）
+    const seenShops = new Set<string>()
+    for (const link of candidates.slice(0, 15)) {
+      const shopName = shopNameFromUrl(link.href)
+      if (seenShops.has(shopName)) continue
+      seenShops.add(shopName)
+
+      results.push({
+        site_name: shopName,
+        product_name: title.slice(0, 100),
+        url: link.href,
+        deadline: date,
+        deadline_estimated: estimated,
+        note: `自動取得 (アグリゲーター経由)${estimated ? ' ※締切推定' : ''}`,
+        status: 'pending',
+        auto_scraped: true,
+      })
+    }
+
+    // 外部リンクが見つからない場合はアグリゲーター記事URLそのままを使用
+    if (results.length === 0) {
+      results.push({
+        site_name: '情報元: ' + aggregatorHost.split('.')[0],
+        product_name: title.slice(0, 100),
+        url: articleUrl,
+        deadline: date,
+        deadline_estimated: estimated,
+        note: `自動取得 (アグリゲーター)${estimated ? ' ※締切推定' : ''}`,
+        status: 'pending',
+        auto_scraped: true,
+      })
+    }
+  } catch {
+    // 記事ページ取得失敗は無視
+  } finally {
+    await page.close()
+  }
+
+  return results
+}
+
+// ===== アグリゲーター一覧ページをスクレイピング =====
+
+async function scrapeAggregator(page: Page, context: BrowserContext, shop: ShopConfig): Promise<ScrapedItem[]> {
   const sel = shop.selectors!
+  const aggregatorHost = new URL(shop.checkUrl).hostname
 
   await page.goto(shop.checkUrl, { waitUntil: 'domcontentloaded', timeout: 15000 })
   await page.waitForTimeout(1500)
 
   const items = await page.$$(sel.items)
 
-  for (const item of items.slice(0, 30)) {
+  // 記事リストを収集
+  interface ArticleInfo { title: string; url: string; dateText: string }
+  const articles: ArticleInfo[] = []
+
+  for (const item of items.slice(0, 20)) {
     try {
       const titleEl = await item.$(sel.title)
       const linkEl = await item.$(sel.link)
@@ -76,19 +202,21 @@ async function scrapeAggregator(page: Page, shop: ShopConfig): Promise<ScrapedIt
       if (!containsAny(title + itemText, [...POKEMON_KEYWORDS, ...shop.keywords])) continue
 
       const dateText = sel.date ? (await item.$(sel.date))?.innerText() ?? '' : ''
-      const { date, estimated } = extractDeadline(await dateText + itemText, shop.name)
+      articles.push({ title, url: fullUrl, dateText: dateText + itemText })
+    } catch { /* skip */ }
+  }
 
-      results.push({
-        site_name: shop.name,
-        product_name: title.slice(0, 100),
-        url: fullUrl,
-        deadline: date,
-        deadline_estimated: estimated,
-        note: `自動取得 (${shop.category})${estimated ? ' ※締切推定' : ''}`,
-        status: 'pending',
-        auto_scraped: true,
-      })
-    } catch { /* item取得失敗は無視 */ }
+  console.log(`  📋 [${shop.name}] 記事${articles.length}件 → 各ショップURLを取得中...`)
+
+  // 記事を並列でフォロー（最大4件同時、最大10記事）
+  const BATCH = 4
+  const results: ScrapedItem[] = []
+  for (let i = 0; i < Math.min(articles.length, 10); i += BATCH) {
+    const batch = articles.slice(i, i + BATCH)
+    const batchResults = await Promise.all(
+      batch.map(a => resolveShopUrl(context, a.url, aggregatorHost, a.title, a.dateText))
+    )
+    results.push(...batchResults.flat())
   }
 
   return results
@@ -101,10 +229,9 @@ async function scrapeShop(context: BrowserContext, shop: ShopConfig): Promise<Sc
   const page = await context.newPage()
 
   try {
-    // アグリゲーターは専用ロジック
     if (shop.selectors) {
-      const items = await scrapeAggregator(page, shop)
-      console.log(`  ✅ [${shop.name}] ${items.length}件 (アグリゲーター)`)
+      const items = await scrapeAggregator(page, context, shop)
+      console.log(`  ✅ [${shop.name}] ${items.length}件 (ショップURL解決済み)`)
       return items
     }
 
@@ -152,7 +279,6 @@ async function scrapeShop(context: BrowserContext, shop: ShopConfig): Promise<Sc
       }
     }
 
-    // リンクで見つからない場合はページ自体を登録
     if (found === 0) {
       const line = pageText.split('\n').find(l =>
         containsAny(l, LOTTERY_KEYWORDS) && containsAny(l, POKEMON_KEYWORDS)
@@ -183,10 +309,10 @@ async function scrapeShop(context: BrowserContext, shop: ShopConfig): Promise<Sc
   return results
 }
 
-// ===== 並列処理（最大5件同時）=====
+// ===== 並列処理（最大3件同時）=====
 
 async function scrapeAllShops(context: BrowserContext): Promise<ScrapedItem[]> {
-  const CONCURRENCY = 5
+  const CONCURRENCY = 3
   const results: ScrapedItem[] = []
 
   for (let i = 0; i < shops.length; i += CONCURRENCY) {
@@ -270,8 +396,8 @@ async function notifyLine(items: ScrapedItem[]) {
 
 async function main() {
   const start = Date.now()
-  console.log('🚀 ポケカ抽選スクレイパー開始')
-  console.log(`対象: ${shops.length}サイト (アグリゲーター${shops.filter(s => s.selectors).length}件含む)`)
+  console.log('🚀 ポケカ抽選スクレイパー開始（2段階スクレイピング）')
+  console.log(`対象: ${shops.length}サイト`)
 
   const browser = await chromium.launch({ headless: true })
   const context = await browser.newContext({
@@ -283,12 +409,20 @@ async function main() {
   const allResults = await scrapeAllShops(context)
   await browser.close()
 
-  // 重複排除（同じ抽選が複数ソースに載っている場合）
+  // URLで重複排除
   const deduped = allResults.filter((item, i, arr) =>
-    arr.findIndex(x => x.product_name === item.product_name && x.site_name !== item.site_name
-      ? false
-      : x.url === item.url) === i
+    arr.findIndex(x => x.url === item.url) === i
   )
+
+  // ショップ別内訳を表示
+  const byShop = deduped.reduce((acc, item) => {
+    acc[item.site_name] = (acc[item.site_name] ?? 0) + 1
+    return acc
+  }, {} as Record<string, number>)
+  console.log('\n📊 ショップ別内訳:')
+  Object.entries(byShop).sort((a, b) => b[1] - a[1]).forEach(([name, count]) => {
+    console.log(`  ${name}: ${count}件`)
+  })
 
   console.log(`\n収集: ${allResults.length}件 → 重複除去後: ${deduped.length}件`)
 
