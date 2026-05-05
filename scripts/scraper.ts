@@ -54,16 +54,15 @@ const SHOP_DOMAINS: Record<string, string> = {
   'mandarake.co.jp': 'まんだらけ',
 }
 
-function shopNameFromUrl(url: string): string {
+function shopNameFromUrl(url: string): string | null {
   try {
     const host = new URL(url).hostname.replace(/^www\./, '')
     for (const [domain, name] of Object.entries(SHOP_DOMAINS)) {
       if (host.includes(domain)) return name
     }
-    // ドメインの最初の部分を使用
-    return host.split('.')[0]
+    return null  // 既知ショップ以外は登録しない
   } catch {
-    return '不明'
+    return null
   }
 }
 
@@ -132,11 +131,11 @@ async function resolveShopUrl(
     )
     const candidates = lotteryLinks.length > 0 ? lotteryLinks : links
 
-    // ショップ別に1件ずつ（同じショップの重複を避ける）
+    // 既知ショップのみ登録（1ショップ1件）
     const seenShops = new Set<string>()
     for (const link of candidates.slice(0, 15)) {
       const shopName = shopNameFromUrl(link.href)
-      if (seenShops.has(shopName)) continue
+      if (!shopName || seenShops.has(shopName)) continue
       seenShops.add(shopName)
 
       results.push({
@@ -146,20 +145,6 @@ async function resolveShopUrl(
         deadline: date,
         deadline_estimated: estimated,
         note: `自動取得 (アグリゲーター経由)${estimated ? ' ※締切推定' : ''}`,
-        status: 'pending',
-        auto_scraped: true,
-      })
-    }
-
-    // 外部リンクが見つからない場合はアグリゲーター記事URLそのままを使用
-    if (results.length === 0) {
-      results.push({
-        site_name: '情報元: ' + aggregatorHost.split('.')[0],
-        product_name: title.slice(0, 100),
-        url: articleUrl,
-        deadline: date,
-        deadline_estimated: estimated,
-        note: `自動取得 (アグリゲーター)${estimated ? ' ※締切推定' : ''}`,
         status: 'pending',
         auto_scraped: true,
       })
