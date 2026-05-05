@@ -179,8 +179,8 @@ async function scrapeAggregator(page: Page, context: BrowserContext, shop: ShopC
   const sel = shop.selectors!
   const aggregatorHost = new URL(shop.checkUrl).hostname
 
-  await page.goto(shop.checkUrl, { waitUntil: 'domcontentloaded', timeout: 15000 })
-  await page.waitForTimeout(1500)
+  await page.goto(shop.checkUrl, { waitUntil: 'domcontentloaded', timeout: 25000 })
+  await page.waitForTimeout(2000)
 
   const items = await page.$$(sel.items)
 
@@ -309,14 +309,23 @@ async function scrapeShop(context: BrowserContext, shop: ShopConfig): Promise<Sc
   return results
 }
 
-// ===== 並列処理（最大3件同時）=====
+// ===== 並列処理（アグリゲーター先行・通常ショップ並列）=====
 
 async function scrapeAllShops(context: BrowserContext): Promise<ScrapedItem[]> {
-  const CONCURRENCY = 3
+  const aggregators = shops.filter(s => s.selectors)
+  const normalShops = shops.filter(s => !s.selectors)
   const results: ScrapedItem[] = []
 
-  for (let i = 0; i < shops.length; i += CONCURRENCY) {
-    const batch = shops.slice(i, i + CONCURRENCY)
+  // アグリゲーターを1件ずつ先に処理（重いので直列）
+  for (const shop of aggregators) {
+    const items = await scrapeShop(context, shop)
+    results.push(...items)
+  }
+
+  // 通常ショップは4件並列
+  const CONCURRENCY = 4
+  for (let i = 0; i < normalShops.length; i += CONCURRENCY) {
+    const batch = normalShops.slice(i, i + CONCURRENCY)
     const batchResults = await Promise.all(batch.map(shop => scrapeShop(context, shop)))
     results.push(...batchResults.flat())
   }
